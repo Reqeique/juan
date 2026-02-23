@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Command `#sessions` to show all active sessions info
+- Command `#cancel` to interrupt ongoing agent operations
 - White check mark emoji reaction on `#new` message when session ends
 - Bot token scope `reactions:write` required for emoji reactions
 

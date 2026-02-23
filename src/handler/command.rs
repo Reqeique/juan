@@ -11,6 +11,7 @@ use tracing::debug;
 /// - #session - Show current session info
 /// - #sessions - Show all active sessions
 /// - #end - End current session
+/// - #cancel - Cancel ongoing agent operation
 /// - #read <file_path> - Read local file content
 /// - #diff [file_path] - Show git diff
 pub async fn handle_command(
@@ -249,6 +250,50 @@ pub async fn handle_command(
                 }
             }
         }
+        "#cancel" => {
+            debug!("Processing #cancel command in thread_ts={:?}", thread_ts);
+            if thread_ts.is_none() {
+                let _ = slack
+                    .send_message(
+                        channel,
+                        None,
+                        "This command can only be used in an agent thread.",
+                    )
+                    .await;
+                return;
+            }
+
+            let thread_key = thread_ts.unwrap();
+            if let Some(session) = session_manager.get_session(thread_key).await {
+                if !session.busy {
+                    let _ = slack
+                        .send_message(channel, thread_ts, "No ongoing operation to cancel.")
+                        .await;
+                    return;
+                }
+
+                match agent_manager
+                    .cancel(&session.agent_name, session.session_id.clone())
+                    .await
+                {
+                    Ok(_) => {
+                        let _ = session_manager.set_busy(thread_key, false).await;
+                        let _ = slack
+                            .send_message(channel, thread_ts, "Operation cancelled.")
+                            .await;
+                    }
+                    Err(e) => {
+                        let _ = slack
+                            .send_message(channel, thread_ts, &format!("Error: {}", e))
+                            .await;
+                    }
+                }
+            } else {
+                let _ = slack
+                    .send_message(channel, thread_ts, "No active session in this thread.")
+                    .await;
+            }
+        }
         "#read" => {
             debug!("Processing #read command in thread_ts={:?}", thread_ts);
             // Read file (only works in threads)
@@ -451,6 +496,7 @@ const HELP_MESSAGE: &str = "Available commands:
 • #session - Show current agent session info
 • #sessions - Show all active sessions
 • #end - End current agent session
+• #cancel - Cancel ongoing agent operation
 • #read <file_path> - Read local file content
 • #diff [file_path] - Show git diff
 • !<command> - Execute shell command";
